@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NearHelp - Emergency Community Response</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --red: #FF2D20;
+    --red-dark: #C41A10;
+    --red-glow: rgba(255,45,32,0.35);
+    --amber: #F59E0B;
+    --green: #10B981;
+    --blue: #3B82F6;
+    --surface: #0D0D0F;
+    --surface-2: #141417;
+    --surface-3: #1C1C21;
+    --surface-4: #252530;
+    --border: rgba(255,255,255,0.08);
+    --text: #F5F5F7;
+    --text-muted: #8E8E9A;
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--surface); color: var(--text); font-family: var(--font-body); overflow-x: hidden; }
+  
+  /* SOS Pulse */
+  @keyframes sosPulse {
+    0% { box-shadow: 0 0 0 0 var(--red-glow), 0 0 0 0 var(--red-glow); }
+    70% { box-shadow: 0 0 0 30px transparent, 0 0 0 60px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  @keyframes sosBeat {
+    0%,100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  @keyframes ripple {
+    0% { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(2.5); opacity: 0; }
+  }
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes blinkDot {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  @keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+  }
+  @keyframes alertShake {
+    0%,100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+  }
+  @keyframes markerPop {
+    0% { transform: scale(0) translateY(-10px); opacity: 0; }
+    80% { transform: scale(1.15) translateY(0); opacity: 1; }
+    100% { transform: scale(1) translateY(0); opacity: 1; }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+  @keyframes countUp {
+    from { transform: translateY(8px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .sos-btn { animation: sosPulse 2s infinite, sosBeat 2s ease-in-out infinite; }
+  .sos-btn:active { transform: scale(0.95); }
+  .ripple-ring { animation: ripple 1.5s ease-out infinite; }
+  .ripple-ring:nth-child(2) { animation-delay: 0.5s; }
+  .ripple-ring:nth-child(3) { animation-delay: 1s; }
+  .slide-up { animation: slideUp 0.4s ease forwards; }
+  .fade-in { animation: fadeIn 0.3s ease forwards; }
+  .live-dot { animation: blinkDot 1.2s ease-in-out infinite; }
+  .alert-shake { animation: alertShake 0.5s ease; }
+  .marker-pop { animation: markerPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+  .spinning { animation: spin 1s linear infinite; }
+  .pulsing { animation: pulse 2s ease infinite; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--surface-2); }
+  ::-webkit-scrollbar-thumb { background: var(--surface-4); border-radius: 2px; }
+
+  /* Map */
+  #map-container { height: 100%; width: 100%; }
+  .leaflet-container { background: #0D1117 !important; }
+  .custom-sos-marker { 
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--red); border: 3px solid white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; box-shadow: 0 0 20px var(--red-glow);
+    animation: sosPulse 2s infinite;
+  }
+  .custom-responder-marker {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--green); border: 2px solid white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .custom-user-marker {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--blue); border: 2px solid white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+  }
+  
+  /* Glass effect */
+  .glass { background: rgba(20,20,23,0.85); backdrop-filter: blur(16px); border: 1px solid var(--border); }
+  .glass-hover:hover { background: rgba(37,37,48,0.9); }
+
+  /* Chat bubble */
+  .chat-bubble-in { background: var(--surface-3); border-radius: 16px 16px 16px 4px; }
+  .chat-bubble-out { background: var(--red); border-radius: 16px 16px 4px 16px; }
+
+  /* Nav active */
+  .nav-item.active { color: var(--red); }
+  .nav-item.active .nav-icon { background: rgba(255,45,32,0.15); }
+
+  /* Skill badge */
+  .skill-badge { 
+    background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3);
+    color: var(--blue); border-radius: 99px; padding: 4px 12px; font-size: 12px;
+    font-weight: 500; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .skill-badge.cpr { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.3); color: #EF4444; }
+  .skill-badge.doctor { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); color: var(--green); }
+
+  /* Input */
+  .inp {
+    background: var(--surface-3); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); padding: 10px 14px; width: 100%; outline: none;
+    font-family: var(--font-body); transition: border-color 0.2s;
+  }
+  .inp:focus { border-color: rgba(255,45,32,0.5); }
+  .inp option { background: var(--surface-3); }
+
+  /* Button variants */
+  .btn-red {
+    background: var(--red); color: white; border: none; border-radius: 10px;
+    padding: 12px 20px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; font-family: var(--font-body);
+  }
+  .btn-red:hover { background: var(--red-dark); transform: translateY(-1px); }
+  .btn-outline {
+    background: transparent; color: var(--text); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 20px; font-weight: 500; cursor: pointer;
+    transition: all 0.2s; font-family: var(--font-body);
+  }
+  .btn-outline:hover { background: var(--surface-4); }
+  .btn-green {
+    background: var(--green); color: white; border: none; border-radius: 10px;
+    padding: 12px 20px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; font-family: var(--font-body);
+  }
+  .btn-green:hover { filter: brightness(1.1); }
+
+  /* Stats card */
+  .stat-card {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px; flex: 1;
+  }
+
+  /* Page transition */
+  .page-enter { animation: slideUp 0.35s ease forwards; }
+
+  /* Metric ring */
+  .ring-wrap { position: relative; width: 60px; height: 60px; }
+  .ring-wrap svg { transform: rotate(-90deg); }
+  .ring-wrap .ring-label { 
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+  }
+  
+  /* Admin table */
+  .admin-table { width: 100%; border-collapse: collapse; }
+  .admin-table th { 
+    text-align: left; padding: 10px 14px; color: var(--text-muted);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border); font-weight: 500;
+  }
+  .admin-table td { 
+    padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 13px;
+  }
+  .admin-table tr:hover td { background: var(--surface-3); }
+
+  /* Crisis type colors */
+  .crisis-medical { color: #EF4444; }
+  .crisis-fire { color: #F97316; }
+  .crisis-gas { color: #EAB308; }
+  .crisis-accident { color: #8B5CF6; }
+  .crisis-other { color: var(--text-muted); }
+
+  /* Incoming alert */
+  @keyframes slideInRight {
+    from { transform: translateX(110%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  .incoming-alert { animation: slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+  /* Resolution overlay */
+  .resolution-overlay {
+    background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
+    position: fixed; inset: 0; z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script type="module">
+// ==========================================
+// STORE - Zustand-like state (vanilla JS)
+// ==========================================
+class Store {
+  constructor(init) {
+    this.state = init;
+    this.listeners = new Set();
+  }
+  getState() { return this.state; }
+  setState(updater) {
+    const next = typeof updater === 'function' ? updater(this.state) : updater;
+    this.state = { ...this.state, ...next };
+    this.listeners.forEach(l => l(this.state));
+  }
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+}
+
+// User Store
+const userStore = new Store({
+  id: 'user_' + Math.random().toString(36).slice(2,8),
+  name: 'Alex Rivera',
+  anonymous: false,
+  skills: ['CPR', 'First Aid'],
+  isResponder: false,
+  respondingTo: null,
+});
+
+// SOS Store
+const sosStore = new Store({
+  active: false,
+  id: null,
+  type: 'Medical Emergency',
+  location: null,
+  resolved: false,
+  timestamp: null,
+  anonymous: false,
+});
+
+// Map Store
+const mapStore = new Store({
+  userLocation: { lat: 40.7128, lng: -74.006 }, // NYC default
+  sosList: [],
+  responders: [],
+  locationDetected: false,
+});
+
+// Chat Store
+const chatStore = new Store({
+  messages: [],
+  open: false,
+});
+
+// ==========================================
+// MOCK SOCKET (simulates socket.io)
+// ==========================================
+class MockSocket {
+  constructor() {
+    this.handlers = {};
+    this.connected = false;
+  }
+  on(event, fn) { 
+    this.handlers[event] = fn; 
+    return this;
+  }
+  emit(event, data) {
+    console.log('[Socket emit]', event, data);
+    // Simulate server responses
+    if (event === 'sos:trigger') {
+      setTimeout(() => {
+        this.simulateResponder();
+      }, 3000);
+    }
+    if (event === 'chat:message') {
+      setTimeout(() => {
+        this.handlers['chat:message']?.({
+          id: Date.now() + 1,
+          from: 'Responder',
+          text: 'I see you! On my way. Stay calm.',
+          time: new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),
+          own: false,
+        });
+      }, 1500);
+    }
+  }
+  connect() {
+    this.connected = true;
+    this.handlers['connect']?.();
+    // Simulate live responder movements
+    this.moveInterval = setInterval(() => {
+      const resp = mapStore.getState().responders;
+      if (resp.length > 0) {
+        const updated = resp.map(r => ({
+          ...r,
+          lat: r.lat + (Math.random() - 0.5) * 0.001,
+          lng: r.lng + (Math.random() - 0.5) * 0.001,
+        }));
+        mapStore.setState({ responders: updated });
+      }
+    }, 3000);
+  }
+  simulateResponder() {
+    const loc = mapStore.getState().userLocation;
+    const newResponder = {
+      id: 'resp_' + Math.random().toString(36).slice(2,6),
+      name: ['Dr. Sam Chen', 'Maria Lopez', 'Jake Torres'][Math.floor(Math.random()*3)],
+      skills: ['CPR', 'Doctor'],
+      lat: loc.lat + (Math.random()-0.5)*0.01,
+      lng: loc.lng + (Math.random()-0.5)*0.01,
+      eta: Math.floor(Math.random()*8)+2,
+    };
+    mapStore.setState({ responders: [...mapStore.getState().responders, newResponder] });
+    this.handlers['responder:joined']?.(newResponder);
+  }
+  disconnect() {
+    clearInterval(this.moveInterval);
+    this.connected = false;
+  }
+}
+
+const socket = new MockSocket();
+
+// ==========================================
+// SERVICES
+// ==========================================
+const api = {
+  baseURL: import.meta?.env?.VITE_BACKEND_URL || 'http://localhost:4000',
+  
+  async triggerSOS(data) {
+    // Mock: return after delay
+    await new Promise(r => setTimeout(r, 800));
+    return { id: 'sos_' + Date.now(), ...data, status: 'active' };
+  },
+  
+  async resolveSOS(id) {
+    await new Promise(r => setTimeout(r, 500));
+    return { id, status: 'resolved' };
+  },
+  
+  async getAdminStats() {
+    await new Promise(r => setTimeout(r, 600));
+    return {
+      activeSOS: 7,
+      totalToday: 24,
+      avgResponseTime: '3m 42s',
+      resolvedToday: 17,
+    };
+  },
+  
+  async getAIGuidance(type) {
+    await new Promise(r => setTimeout(r, 1200));
+    const guidance = {
+      'Medical Emergency': {
+        steps: ['Call 911 immediately', 'Check breathing & pulse', 'Begin CPR if unresponsive', 'Use AED if available', 'Stay until help arrives'],
+        summary: 'Medical emergency detected nearby. A responder with CPR certification is 3 minutes away. Patient should be kept still and calm.',
+        severity: 'HIGH'
+      },
+      'Fire': {
+        steps: ['Evacuate building immediately', 'Alert all occupants', 'Call 911', 'Do NOT use elevators', 'Meet at designated assembly point'],
+        summary: 'Fire emergency reported. Wind direction NW. Fire station 12 dispatched. Keep all exits clear.',
+        severity: 'CRITICAL'
+      },
+      'Gas Leak': {
+        steps: ['Evacuate area immediately', 'Do NOT use electrical switches', 'Do NOT ignite flames', 'Call gas company & 911', 'Ventilate if safe'],
+        summary: 'Suspected gas leak. Utility company notified. Keep 200m clear radius. Do not operate electronics.',
+        severity: 'HIGH'
+      },
+      'Accident': {
+        steps: ['Ensure scene safety', 'Call 911 immediately', 'Do not move injured persons', 'Provide basic first aid', 'Direct traffic if safe'],
+        summary: 'Vehicle accident reported. EMS dispatched. Nearby responder with First Aid training approaching.',
+        severity: 'MEDIUM'
+      },
+      'Other': {
+        steps: ['Assess the situation', 'Call appropriate emergency services', 'Keep bystanders back', 'Document details', 'Cooperate with responders'],
+        summary: 'Emergency situation reported. Assessing appropriate response team. Stay safe and alert.',
+        severity: 'MEDIUM'
+      }
+    };
+    return guidance[type] || guidance['Other'];
+  }
+};
+
+// ==========================================
+// REACTIVE MINI-FRAMEWORK
+// ==========================================
+function h(tag, attrs={}, ...children) {
+  const el = document.createElement(tag);
+  Object.entries(attrs).forEach(([k, v]) => {
+    if (k === 'class') el.className = v;
+    else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k.startsWith('on') && typeof v === 'function') {
+      el.addEventListener(k.slice(2).toLowerCase(), v);
+    }
+    else if (k === 'html') el.innerHTML = v;
+    else el.setAttribute(k, v);
+  });
+  children.flat().forEach(child => {
+    if (child == null || child === false) return;
+    el.append(typeof child === 'string' ? child : child);
+  });
+  return el;
+}
+
+// ==========================================
+// ROUTER
+// ==========================================
+class Router {
+  constructor(routes) {
+    this.routes = routes;
+    this.current = 'home';
+    this.listeners = new Set();
+    this.history = ['home'];
+  }
+  navigate(page) {
+    this.current = page;
+    this.history.push(page);
+    this.listeners.forEach(l => l(page));
+  }
+  subscribe(fn) {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+}
+
+const router = new Router({});
+
+// ==========================================
+// COMPONENTS
+// ==========================================
+
+// --- SHARED: Live Badge ---
+function LiveBadge() {
+  return h('span', { class: 'flex items-center gap-1.5 text-xs font-mono text-red-400' },
+    h('span', { class: 'live-dot w-2 h-2 rounded-full bg-red-500 inline-block' }),
+    'LIVE'
+  );
+}
+
+// --- SHARED: Navbar ---
+function Navbar(currentPage) {
+  const nav = h('nav', { 
+    class: 'fixed bottom-0 left-0 right-0 glass z-50',
+    style: { borderTop: '1px solid var(--border)', paddingBottom: 'env(safe-area-inset-bottom)' }
+  });
+
+  const items = [
+    { id: 'home', icon: '🏠', label: 'Home' },
+    { id: 'map', icon: '🗺️', label: 'Map' },
+    { id: 'responder', icon: '🚑', label: 'Respond' },
+    { id: 'profile', icon: '👤', label: 'Profile' },
+    { id: 'admin', icon: '⚙️', label: 'Admin' },
+  ];
+
+  const inner = h('div', { class: 'flex justify-around items-center py-2 px-4 max-w-lg mx-auto' });
+  
+  items.forEach(item => {
+    const btn = h('button', {
+      class: `nav-item flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all ${currentPage === item.id ? 'active' : ''}`,
+      onclick: () => router.navigate(item.id)
+    },
+      h('span', { class: `nav-icon text-xl w-10 h-10 flex items-center justify-center rounded-xl transition-all ${currentPage === item.id ? 'bg-red-500 bg-opacity-15' : ''}` }, item.icon),
+      h('span', { class: `text-xs font-medium ${currentPage === item.id ? 'text-red-400' : 'text-gray-500'}` }, item.label)
+    );
+    inner.append(btn);
+  });
+
+  nav.append(inner);
+  return nav;
+}
+
+// --- SHARED: Loading Spinner ---
+function Spinner(size = 24) {
+  const s = h('div', { 
+    class: 'spinning inline-block rounded-full',
+    style: { 
+      width: size+'px', height: size+'px',
+      border: '2px solid rgba(255,255,255,0.15)',
+      borderTopColor: 'var(--red)'
+    }
+  });
+  return s;
+}
+
+// --- COMPONENT: SOS Button ---
+function SOSButtonComponent() {
+  const wrap = h('div', { class: 'relative flex items-center justify-center', style: { width: '220px', height: '220px' } });
+  
+  // Ripple rings
+  for (let i = 0; i < 3; i++) {
+    const ring = h('div', { 
+      class: 'ripple-ring absolute rounded-full border-2 border-red-500 opacity-40',
+      style: { width: '150px', height: '150px', animationDelay: `${i*0.5}s` }
+    });
+    wrap.append(ring);
+  }
+
+  const btn = h('button', {
+    class: 'sos-btn relative z-10 w-36 h-36 rounded-full bg-red-600 text-white flex flex-col items-center justify-center gap-1 cursor-pointer',
+    style: { fontSize: '14px', fontFamily: 'var(--font-display)', letterSpacing: '2px', fontSize: '28px', border: '4px solid rgba(255,255,255,0.3)' },
+    onclick: () => router.navigate('sos')
+  },
+    h('span', { style: { fontSize: '36px', lineHeight: 1 } }, '🆘'),
+    h('span', { style: { fontFamily: 'var(--font-display)', fontSize: '22px', letterSpacing: '3px', marginTop: '2px' } }, 'SOS')
+  );
+  
+  wrap.append(btn);
+  return wrap;
+}
+
+// --- PAGE: HOME ---
+function HomePage() {
+  const { active, type } = sosStore.getState();
+  const { userLocation, locationDetected } = mapStore.getState();
+  const { name } = userStore.getState();
+
+  const page = h('div', { class: 'page-enter min-h-screen pb-24' });
+
+  // Header
+  const header = h('div', { 
+    class: 'glass sticky top-0 z-40 px-4 py-3',
+  },
+    h('div', { class: 'flex items-center justify-between max-w-lg mx-auto' },
+      h('div', {},
+        h('div', { class: 'flex items-center gap-2' },
+          h('span', { style: { fontFamily: 'var(--font-display)', fontSize: '26px', letterSpacing: '2px', color: 'var(--red)' } }, 'NEAR'),
+          h('span', { style: { fontFamily: 'var(--font-display)', fontSize: '26px', letterSpacing: '2px' } }, 'HELP')
+        ),
+        h('p', { class: 'text-xs text-gray-500' }, `Welcome, ${name}`)
+      ),
+      h('div', { class: 'flex items-center gap-2' },
+        active ? LiveBadge() : h('span', {}),
+        h('div', { 
+          class: 'w-9 h-9 rounded-full bg-red-600 flex items-center justify-center text-sm font-bold cursor-pointer',
+          onclick: () => router.navigate('profile')
+        }, name[0])
+      )
+    )
+  );
+
+  page.append(header);
+
+  const content = h('div', { class: 'max-w-lg mx-auto px-4 pt-8' });
+
+  // Active SOS Banner
+  if (active) {
+    const banner = h('div', {
+      class: 'mb-6 p-4 rounded-2xl border border-red-500 border-opacity-40 slide-up',
+      style: { background: 'rgba(255,45,32,0.08)' }
+    },
+      h('div', { class: 'flex items-center gap-3 mb-2' },
+        h('span', { class: 'live-dot w-3 h-3 rounded-full bg-red-500 inline-block' }),
+        h('span', { class: 'font-semibold text-red-400' }, 'SOS ACTIVE'),
+        h('span', { class: 'ml-auto text-xs text-gray-500 font-mono' }, type)
+      ),
+      h('p', { class: 'text-sm text-gray-400 mb-3' }, 'Emergency broadcast is live. Nearby responders notified.'),
+      h('div', { class: 'flex gap-2' },
+        h('button', { class: 'btn-outline text-sm py-2 px-4 flex-1', onclick: () => router.navigate('map') }, '📍 View Map'),
+        h('button', { 
+          class: 'btn-red text-sm py-2 px-4 flex-1',
+          onclick: () => {
+            sosStore.setState({ active: false, resolved: true, id: null });
+            showToast('✅ SOS Marked as Resolved');
+            mapStore.setState({ sosList: [], responders: [] });
+            render();
+          }
+        }, '✅ Mark Resolved')
+      )
+    );
+    content.append(banner);
+  }
+
+  // SOS Button
+  const sosSection = h('div', { class: 'flex flex-col items-center gap-4 mb-8' },
+    h('p', { class: 'text-gray-400 text-sm' }, 'Press & hold to send emergency alert'),
+    SOSButtonComponent(),
+    h('p', { class: 'text-xs text-gray-600 text-center max-w-xs' }, 
+      '📍 ' + (locationDetected ? `${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}` : 'Detecting location...')
+    )
+  );
+  content.append(sosSection);
+
+  // Quick actions
+  const grid = h('div', { class: 'grid grid-cols-2 gap-3 mb-6' });
+  const quickActions = [
+    { icon: '🗺️', label: 'Live Map', sub: 'View active alerts', page: 'map', color: '#3B82F6' },
+    { icon: '🚑', label: 'Respond', sub: 'Help someone nearby', page: 'responder', color: '#10B981' },
+    { icon: '💬', label: 'AI Guide', sub: 'Crisis assistance', page: 'ai', color: '#8B5CF6' },
+    { icon: '👤', label: 'Profile', sub: 'Skills & settings', page: 'profile', color: '#F59E0B' },
+  ];
+
+  quickActions.forEach(action => {
+    const card = h('button', {
+      class: 'glass glass-hover p-4 rounded-2xl text-left transition-all',
+      onclick: () => router.navigate(action.page)
+    },
+      h('div', { 
+        class: 'w-10 h-10 rounded-xl flex items-center justify-center text-xl mb-3',
+        style: { background: action.color + '22' }
+      }, action.icon),
+      h('p', { class: 'font-semibold text-sm' }, action.label),
+      h('p', { class: 'text-xs text-gray-500 mt-0.5' }, action.sub)
+    );
+    grid.append(card);
+  });
+  content.append(grid);
+
+  // Recent activity
+  const activity = h('div', { class: 'glass rounded-2xl p-4' },
+    h('div', { class: 'flex items-center justify-between mb-3' },
+      h('h3', { class: 'font-semibold text-sm' }, 'Nearby Activity'),
+      h('span', { class: 'text-xs text-gray-500' }, 'Live')
+    ),
+    ...mockNearbyActivity()
+  );
+  content.append(activity);
+
+  page.append(content);
+  page.append(Navbar('home'));
+  return page;
+}
+
+function mockNearbyActivity() {
+  const items = [
+    { icon: '🟢', text: 'Medical emergency resolved', loc: '0.3mi away', time: '2m ago' },
+    { icon: '🔴', text: 'Accident on Main St', loc: '0.7mi away', time: '8m ago' },
+    { icon: '🟡', text: 'Dr. Chen joined as responder', loc: '0.5mi away', time: '12m ago' },
+  ];
+  return items.map(item => 
+    h('div', { class: 'flex items-center gap-3 py-2.5 border-b border-opacity-10', style: { borderColor: 'var(--border)' } },
+      h('span', { class: 'text-lg' }, item.icon),
+      h('div', { class: 'flex-1 min-w-0' },
+        h('p', { class: 'text-sm font-medium truncate' }, item.text),
+        h('p', { class: 'text-xs text-gray-500' }, item.loc)
+      ),
+      h('span', { class: 'text-xs text-gray-600 font-mono whitespace-nowrap' }, item.time)
+    )
+  );
+}
+
+// --- PAGE: SOS Broadcast ---
+function SOSPage() {
+  const { type, anonymous } = sosStore.getState();
+  const { locationDetected, userLocation } = mapStore.getState();
+  
+  let selectedType = type;
+  let isAnon = anonymous;
+  let loading = false;
+  let locationLoading = !locationDetected;
+
+  const page = h('div', { class: 'page-enter min-h-screen pb-24' });
+
+  // Back header
+  const header = h('div', { class: 'glass sticky top-0 z-40 px-4 py-3' },
+    h('div', { class: 'flex items-center gap-3 max-w-lg mx-auto' },
+      h('button', { class: 'w-8 h-8 rounded-lg glass flex items-center justify-center text-sm', onclick: () => router.navigate('home') }, '←'),
+      h('h1', { class: 'font-semibold', style: { fontFamily: 'var(--font-display)', fontSize: '22px', letterSpacing: '2px' } }, 'SOS BROADCAST'),
+    )
+  );
+  page.append(header);
+
+  const content = h('div', { class: 'max-w-lg mx-auto px-4 pt-6' });
+
+  // Location status
+  const locCard = h('div', { 
+    class: `glass rounded-2xl p-4 mb-4 flex items-center gap-3 ${locationDetected ? '' : 'pulsing'}`,
+    style: { borderColor: locationDetected ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)' }
+  },
+    h('div', { 
+      class: 'w-10 h-10 rounded-xl flex items-center justify-center text-xl',
+      style: { background: locationDetected ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)' }
+    }, locationDetected ? '📍' : '🔍'),
+    h('div', {},
+      h('p', { class: 'text-sm font-medium' }, locationDetected ? 'Location Detected' : 'Detecting Location...'),
+      h('p', { class: 'text-xs text-gray-500' }, 
+        locationDetected ? `${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}` : 'Please allow location access'
+      )
+    ),
+    locationDetected ? h('span', { class: 'ml-auto text-green-400 text-lg' }, '✓') : Spinner(20)
+  );
+  content.append(locCard);
+
+  // Crisis Type
+  const typeSection = h('div', { class: 'glass rounded-2xl p-4 mb-4' },
+    h('label', { class: 'text-xs font-medium text-gray-400 uppercase tracking-wider block mb-3' }, 'Crisis Type'),
+    h('select', { 
+      class: 'inp',
+      onchange: (e) => { selectedType = e.target.value; }
+    },
+      ...['Medical Emergency', 'Fire', 'Gas Leak', 'Accident', 'Other'].map(t =>
+        h('option', { value: t, ...(t === selectedType ? { selected: true } : {}) }, 
+          { 'Medical Emergency': '🏥 Medical Emergency', 'Fire': '🔥 Fire', 'Gas Leak': '⚠️ Gas Leak', 'Accident': '🚗 Accident', 'Other': '📢 Other' }[t]
+        )
+      )
+    )
+  );
+  content.append(typeSection);
+
+  // Anonymous toggle
+  const anonSection = h('div', { class: 'glass rounded-2xl p-4 mb-4 flex items-center justify-between' },
+    h('div', {},
+      h('p', { class: 'font-medium text-sm' }, '🕵️ Anonymous Mode'),
+      h('p', { class: 'text-xs text-gray-500 mt-0.5' }, 'Hide your identity from responders')
+    ),
+    h('div', {
+      class: `w-12 h-6 rounded-full cursor-pointer transition-all relative ${isAnon ? 'bg-red-600' : 'bg-gray-700'}`,
+      onclick: function() { 
+        isAnon = !isAnon;
+        this.className = `w-12 h-6 rounded-full cursor-pointer transition-all relative ${isAnon ? 'bg-red-600' : 'bg-gray-700'}`;
+        const knob = this.querySelector('.knob');
+        knob.style.transform = isAnon ? 'translateX(24px)' : 'translateX(2px)';
+      }
+    },
+      h('div', { 
+        class: 'knob absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform',
+        style: { transform: isAnon ? 'translateX(24px)' : 'translateX(2px)', bottom: '2px' }
+      })
+    )
+  );
+  content.append(anonSection);
+
+  // Notes
+  const notesSection = h('div', { class: 'glass rounded-2xl p-4 mb-6' },
+    h('label', { class: 'text-xs font-medium text-gray-400 uppercase tracking-wider block mb-3' }, 'Additional Notes (Optional)'),
+    h('textarea', { 
+      class: 'inp resize-none', 
+      placeholder: 'Describe the situation briefly...',
+      rows: 3
+    })
+  );
+  content.append(notesSection);
+
+  // Send button
+  let sendBtn;
+  const btnWrap = h('div', {});
+  sendBtn = h('button', {
+    class: 'btn-red w-full py-4 text-lg font-bold rounded-2xl',
+    style: { fontFamily: 'var(--font-display)', letterSpacing: '2px', fontSize: '20px' },
+    onclick: async function() {
+      if (!locationDetected) { showToast('⚠️ Please wait for location detection'); return; }
+      loading = true;
+      sendBtn.disabled = true;
+      sendBtn.innerHTML = '';
+      sendBtn.append(Spinner(22), ' Sending SOS...');
+      
+      try {
+        const result = await api.triggerSOS({
+          type: selectedType,
+          location: userLocation,
+          anonymous: isAnon,
+        });
+
+        sosStore.setState({
+          active: true,
+          id: result.id,
+          type: selectedType,
+          location: userLocation,
+          anonymous: isAnon,
+          timestamp: Date.now(),
+        });
+
+        mapStore.setState({
+          sosList: [{
+            id: result.id,
+            type: selectedType,
+            lat: userLocation.lat,
+            lng: userLocation.lng,
+            timestamp: Date.now(),
+          }]
+        });
+
+        socket.connect();
+        socket.emit('sos:trigger', { ...sosStore.getState() });
+        socket.on('responder:joined', (data) => {
+          showToast(`🚑 ${data.name} is responding! ETA: ${data.eta}min`);
+        });
+
+        showToast('🆘 SOS Broadcast Live!');
+        router.navigate('map');
+      } catch (e) {
+        showToast('❌ Failed to send SOS. Retry.');
+        sendBtn.disabled = false;
+        sendBtn.textContent = '🆘 SEND SOS';
+        loading = false;
+      }
+    }
+  }, '🆘 SEND SOS');
+  
+  btnWrap.append(sendBtn);
+  content.append(btnWrap);
+
+  // Auto detect location
+  if (!locationDetected && navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        mapStore.setState({ 
+          userLocation: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+          locationDetected: true 
+        });
+        render();
+      },
+      () => {
+        mapStore.setState({ locationDetected: true }); // use default
+        render();
+      }
+    );
+  } else if (!locationDetected) {
+    setTimeout(() => {
+      mapStore.setState({ locationDetected: true });
+      render();
+    }, 1500);
+  }
+
+  page.append(content);
+  page.append(Navbar('sos'));
+  return page;
+}
+
+// --- PAGE: LIVE MAP ---
+let mapInstance = null;
+let markers = {};
+
+function LiveMapPage() {
+  const { sosList, responders, userLocation } = mapStore.getState();
+  const { active, type } = sosStore.getState();
+
+  const page = h('div', { class: 'page-enter', style: { height: '100vh', display: 'flex', flexDirection: 'column' } });
+
+  // Header
+  const header = h('div', { class: 'glass px-4 py-3 z-40' },
+    h('div', { class: 'flex items-center justify-between max-w-lg mx-auto' },
+      h('div', { class: 'flex items-center gap-2' },
+        h('button', { class: 'w-8 h-8 rounded-lg glass flex items-center justify-center text-sm mr-1', onclick: () => router.navigate('home') }, '←'),
+        h('span', { style: { fontFamily: 'var(--font-display)', fontSize: '20px', letterSpacing: '2px', color: 'var(--red)' } }, 'LIVE MAP')
+      ),
+      h('div', { class: 'flex items-center gap-2' },
+        active ? LiveBadge() : h('span', {}),
+        h('div', { class: 'flex items-center gap-1 text-xs text-gray-400' },
+          h('span', { class: 'w-2 h-2 rounded-full bg-red-500' }),
+          sosList.length + ' SOS',
+          h('span', { class: 'ml-2 w-2 h-2 rounded-full bg-green-500' }),
+          responders.length + ' Resp.'
+        )
+      )
+    )
+  );
+  page.append(header);
+
+  // Map container
+  const mapWrap = h('div', { style: { flex: 1, position: 'relative', overflow: 'hidden' } });
+  const mapEl = h('div', { id: 'leaflet-map', style: { height: '100%', width: '100%' } });
+  mapWrap.append(mapEl);
+  page.append(mapWrap);
+
+  // Legend
+  const legend = h('div', { 
+    class: 'absolute bottom-28 left-4 glass rounded-2xl p-3 z-50',
+    style: { position: 'absolute' }
+  },
+    h('div', { class: 'flex flex-col gap-2' },
+      h('div', { class: 'flex items-center gap-2 text-xs' },
+        h('span', { class: 'w-3 h-3 rounded-full bg-red-500 inline-block' }),
+        'Active SOS'
+      ),
+      h('div', { class: 'flex items-center gap-2 text-xs' },
+        h('span', { class: 'w-3 h-3 rounded-full bg-green-500 inline-block' }),
+        'Responder'
+      ),
+      h('div', { class: 'flex items-center gap-2 text-xs' },
+        h('span', { class: 'w-3 h-3 rounded-full bg-blue-500 inline-block' }),
+        'You'
+      )
+    )
+  );
+  mapWrap.append(legend);
+
+  // Floating chat button (if responding)
+  if (active) {
+    const chatBtn = h('button', {
+      class: 'absolute bottom-28 right-4 w-14 h-14 bg-red-600 rounded-full flex items-center justify-center text-2xl shadow-lg z-50',
+      style: { position: 'absolute' },
+      onclick: () => router.navigate('chat')
+    }, '💬');
+    mapWrap.append(chatBtn);
+  }
+
+  page.append(Navbar('map'));
+
+  // Initialize map after DOM
+  setTimeout(() => {
+    if (mapInstance) { 
+      mapInstance.remove(); 
+      mapInstance = null;
+      markers = {};
+    }
+    
+    mapInstance = L.map('leaflet-map', { zoomControl: false }).setView(
+      [userLocation.lat, userLocation.lng], 14
+    );
+    
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap, © CARTO',
+      maxZoom: 19
+    }).addTo(mapInstance);
+
+    L.control.zoom({ position: 'topright' }).addTo(mapInstance);
+
+    // User marker
+    const userIcon = L.divIcon({
+      html: '<div style="width:28px;height:28px;border-radius:50%;background:#3B82F6;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>',
+      iconSize: [28, 28], iconAnchor: [14, 14], className: ''
+    });
+    L.marker([userLocation.lat, userLocation.lng], { icon: userIcon })
+      .addTo(mapInstance)
+      .bindPopup('<b>You</b>');
+
+    // SOS markers
+    sosList.forEach(sos => addSOSMarker(sos));
+
+    // Responder markers
+    responders.forEach(resp => addResponderMarker(resp));
+
+    // Add some demo SOS points
+    if (sosList.length === 0) {
+      const demoSOS = [
+        { id: 'demo1', type: 'Medical Emergency', lat: userLocation.lat + 0.005, lng: userLocation.lng - 0.007 },
+        { id: 'demo2', type: 'Accident', lat: userLocation.lat - 0.008, lng: userLocation.lng + 0.004 },
+      ];
+      demoSOS.forEach(s => addSOSMarker(s));
+    }
+
+    // Live updates
+    const updateInterval = setInterval(() => {
+      const { responders: currentResp } = mapStore.getState();
+      currentResp.forEach(resp => {
+        if (markers['resp_' + resp.id]) {
+          markers['resp_' + resp.id].setLatLng([resp.lat, resp.lng]);
+        }
+      });
+    }, 3000);
+
+    // Store cleanup
+    setTimeout(() => clearInterval(updateInterval), 60000);
+
+  }, 100);
+
+  return page;
+}
+
+function addSOSMarker(sos) {
+  if (!mapInstance) return;
+  const icons = { 'Medical Emergency':'🏥', 'Fire':'🔥', 'Gas Leak':'⚠️', 'Accident':'🚗', 'Other':'📢' };
+  const icon = L.divIcon({
+    html: `<div style="width:40px;height:40px;border-radius:50%;background:#FF2D20;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 20px rgba(255,45,32,0.5);animation:sosPulse 2s infinite">${icons[sos.type]||'🆘'}</div>`,
+    iconSize: [40, 40], iconAnchor: [20, 20], className: ''
+  });
+  const m = L.marker([sos.lat, sos.lng], { icon })
+    .addTo(mapInstance)
+    .bindPopup(`<b>${sos.type}</b><br/><small>Active Emergency</small>`);
+  markers['sos_' + sos.id] = m;
+}
+
+function addResponderMarker(resp) {
+  if (!mapInstance) return;
+  const icon = L.divIcon({
+    html: `<div style="width:32px;height:32px;border-radius:50%;background:#10B981;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:14px;">🚑</div>`,
+    iconSize: [32, 32], iconAnchor: [16, 16], className: ''
+  });
+  const m = L.marker([resp.lat, resp.lng], { icon })
+    .addTo(mapInstance)
+    .bindPopup(`<b>${resp.name}</b><br/>ETA: ${resp.eta}min`);
+  markers['resp_' + resp.id] = m;
+}
+
+// --- PAGE: RESPONDER ---
+function ResponderPage() {
+  const { sosList, userLocation } = mapStore.getState();
+  const { isResponder, respondingTo } = userStore.getState();
+
+  const page = h('div', { class: 'page-enter min-h-screen pb-24' });
+
+  const header = h('div', { class: 'glass sticky top-0 z-40 px-4 py-3' },
+    h('div', { class: 'flex items-center gap-3 max-w-lg mx-auto' },
+      h('button', { class: 'w-8 h-8 rounded-lg glass flex items-center justify-center text-sm', onclick: () => router.navigate('home') }, '←'),
+      h('h1', { style: { fontFamily: 'var(--font-display)', fontSize: '22px', letterSpacing: '2px' } }, 'RESPONDER VIEW')
+    )
+  );
+  page.append(header);
+
+  const content = h('div', { class: 'max-w-lg mx-auto px-4 pt-4' });
+
+  if (isResponder && respondingTo) {
+    // Currently responding - show nav + chat
+    content.append(ActiveResponderView());
+  } else {
+    // Show incoming alerts
+    const intro = h('div', { class: 'glass rounded-2xl p-4 mb-4 flex items-center gap-3' },
+      h('div', { class: 'live-dot w-3 h-3 rounded-full bg-red-500' }),
+      h('div', {},
+        h('p', { class: 'font-medium text-sm' }, 'Monitoring for nearby emergencies'),
+        h('p', { class: 'text-xs text-gray-500' }, 'You\'ll be notified when someone needs help')
+      )
+    );
+    content.append(intro);
+
+    // Incoming alerts
+    const alertsTitle = h('div', { class: 'flex items-center justify-between mb-3' },
+      h('h2', { class: 'font-semibold text-sm text-gray-300' }, 'Incoming Alerts'),
+      h('span', { class: 'text-xs text-gray-600 font-mono' }, 'Real-time')
+    );
+    content.append(alertsTitle);
+
+    const mockAlerts = [
+      { id: 'a1', type: 'Medical Emergency', icon: '🏥', distance: '0.3mi', time: '2m ago', urgent: true },
+      { id: 'a2', type: 'Accident', icon: '🚗', distance: '0.7mi', time: '8m ago', urgent: false },
+      { id: 'a3', type: 'Other', icon: '📢', distance: '1.2mi', time: '15m ago', urgent: false },
+    ];
+
+    mockAlerts.forEach(alert => {
+      content.append(IncomingAlertCard(alert));
+    });
+  }
+
+  page.append(content);
+  page.append(Navbar('responder'));
+  return page;
+}
+
+function IncomingAlertCard(alert) {
+  const typeColors = {
+    'Medical Emergency': '#EF4444',
+    'Fire': '#F97316',
+    'Gas Leak': '#EAB308',
+    'Accident': '#8B5CF6',
+    'Other': '#6B7280',
+  };
+  const color = typeColors[alert.type] || '#6B7280';
+
+  const card = h('div', {
+    class: `incoming-alert glass rounded-2xl p-4 mb-3 ${alert.urgent ? 'alert-shake' : ''}`,
+    style: { borderLeft: `3px solid ${color}` }
+  },
+    h('div', { class: 'flex items-start gap-3 mb-3' },
+      h('div', { 
+        class: 'w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0',
+        style: { background: color + '22' }
+      }, alert.icon),
+      h('div', { class: 'flex-1 min-w-0' },
+        h('div', { class: 'flex items-center gap-2 mb-1' },
+          h('span', { class: 'font-bold text-sm', style: { color } }, alert.type),
+          alert.urgent ? h('span', { class: 'text-xs bg-red-500 bg-opacity-20 text-red-400 px-2 py-0.5 rounded-full' }, 'URGENT') : h('span', {})
+        ),
+        h('div', { class: 'flex items-center gap-3 text-xs text-gray-400' },
+          h('span', {}, '📍 ' + alert.distance),
+          h('span', {}, '⏰ ' + alert.time)
+        )
+      )
+    ),
+    h('div', { class: 'flex gap-2' },
+      h('button', { 
+        class: 'btn-red flex-1 py-2.5 text-sm font-semibold rounded-xl',
+        onclick: () => {
+          userStore.setState({ isResponder: true, respondingTo: alert.id });
+          socket.connect();
+          socket.emit('responder:join', { alertId: alert.id });
+          showToast('🚑 You\'re now responding!');
+          render();
+        }
+      }, "🚑 I'm Responding"),
+      h('button', { class: 'btn-outline py-2.5 px-3 text-sm rounded-xl', onclick: () => router.navigate('map') }, '🗺️')
+    )
+  );
+  return card;
+}
+
+function ActiveResponderView() {
+  const { responders } = mapStore.getState();
+  return h('div', { class: 'slide-up' },
+    h('div', { class: 'glass rounded-2xl p-4 mb-4', style: { borderColor: 'rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.05)' } },
+      h('div', { class: 'flex items-center gap-2 mb-2' },
+        h('span', { class: 'live-dot w-2 h-2 rounded-full bg-green-500' }),
+        h('span', { class: 'font-bold text-green-400' }, 'RESPONDING')
+      ),
+      h('p', { class: 'text-sm text-gray-400 mb-3' }, 'Navigation active. Broadcaster location live.'),
+      h('div', { class: 'flex gap-2' },
+        h('button', { class: 'btn-green flex-1 py-2.5 text-sm rounded-xl', onclick: () => router.navigate('map') }, '🗺️ Open Navigation'),
+        h('button', { class: 'btn-outline py-2.5 px-3 text-sm rounded-xl', onclick: () => router.navigate('chat') }, '💬 Chat')
+      )
+    ),
+    h('div', { class: 'glass rounded-2xl p-4 mb-4' },
+      h('p', { class: 'text-xs text-gray-500 mb-2 uppercase tracking-wider' }, 'Broadcaster'),
+      h('div', { class: 'flex items-center gap-3' },
+        h('div', { class: 'w-10 h-10 rounded-full bg-red-600 flex items-center justify-center font-bold' }, 'A'),
+        h('div', {},
+          h('p', { class: 'font-medium text-sm' }, 'Anonymous User'),
+          h('p', { class: 'text-xs text-green-400' }, '📍 Live location sharing')
+        ),
+        h('div', { class: 'ml-auto text-right' },
+          h('p', { class: 'text-lg font-bold text-red-400' }, '0.3mi'),
+          h('p', { class: 'text-xs text-gray-500' }, 'distance')
+        )
+      )
+    ),
+    h('button', { 
+      class: 'btn-outline w-full py-3 text-sm rounded-2xl',
+      onclick: () => {
+        userStore.setState({ isResponder: false, respondingTo: null });
+        showToast('Response ended');
+        render();
+      }
+    }, '✖ Stop Responding')
+  );
+}
+
+// --- PAGE: CHAT ---
+function ChatPage() {
+  const { messages } = chatStore.getState();
+  
+  const page = h('div', { class: 'page-enter', style: { height: '100vh', display: 'flex', flexDirection: 'column' } });
+
+  const header = h('div', { class: 'glass px-4 py-3 z-40' },
+    h('div', { class: 'flex items-center gap-3 max-w-lg mx-auto' },
+      h('button', { class: 'w-8 h-8 rounded-lg glass flex items-center justify-center text-sm', onclick: () => router.navigate('responder') }, '←'),
+      h('div', { class: 'w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-sm' }, '🚑'),
+      h('div', {},
+        h('p', { class: 'font-semibold text-sm' }, 'Emergency Chat'),
+        h('div', { class: 'flex items-center gap-1' },
+          h('span', { class: 'live-dot w-1.5 h-1.5 rounded-full bg-green-500' }),
+          h('span', { class: 'text-xs text-green-400' }, 'Responder connected')
+        )
+      )
+    )
+  );
+  page.append(header);
+
+  // Messages
+  const messagesWrap = h('div', {
+    id: 'chat-messages',
+    class: 'flex-1 overflow-y-auto px-4 py-4',
+    style: { maxWidth: '512px', margin: '0 auto', width: '100%' }
+  });
+
+  const defaultMsgs = [
+    { id: 1, from: 'System', text: 'Emergency channel open. Responder is on the way.', time: '14:32', own: false, system: true },
+    { id: 2, from: 'You', text: 'I need help! I think my friend is having a heart attack.', time: '14:32', own: true },
+    { id: 3, from: 'Responder', text: "I'm Dr. Chen, I'm 3 minutes away. Is the person conscious?", time: '14:33', own: false },
+  ];
+
+  const allMsgs = [...defaultMsgs, ...messages];
+  
+  allMsgs.forEach(msg => {
+    if (msg.system) {
+      messagesWrap.append(h('div', { class: 'flex justify-center mb-3' },
+        h('span', { class: 'text-xs text-gray-600 glass px-3 py-1 rounded-full' }, msg.text)
+      ));
+    } else if (msg.own) {
+      messagesWrap.append(h('div', { class: 'flex justify-end mb-3' },
+        h('div', { class: 'max-w-xs' },
+          h('div', { class: 'chat-bubble-out px-4 py-2.5 text-sm' }, msg.text),
+          h('p', { class: 'text-xs text-gray-600 text-right mt-1' }, msg.time)
+        )
+      ));
+    } else {
+      messagesWrap.append(h('div', { class: 'flex gap-2 mb-3' },
+        h('div', { class: 'w-7 h-7 rounded-full bg-green-700 flex items-center justify-center text-xs flex-shrink-0 mt-1' }, '🚑'),
+        h('div', { class: 'max-w-xs' },
+          h('p', { class: 'text-xs text-gray-500 mb-1' }, msg.from),
+          h('div', { class: 'chat-bubble-in px-4 py-2.5 text-sm' }, msg.text),
+          h('p', { class: 'text-xs text-gray-600 mt-1' }, msg.time)
+        )
+      ));
+    }
+  });
+
+  page.append(messagesWrap);
+
+  // Input
+  let inputEl;
+  const inputWrap = h('div', { class: 'glass px-4 py-3', style: { paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' } },
+    h('div', { class: 'flex gap-2 items-end max-w-lg mx-auto' },
+      (inputEl = h('textarea', {
+        class: 'inp flex-1 resize-none text-sm',
+        placeholder: 'Type a message...',
+        rows: 1,
+        style: { maxHeight: '100px', lineHeight: '1.5' },
+        oninput: function() {
+          this.style.height = 'auto';
+          this.style.height = this.scrollHeight + 'px';
+        },
+        onkeydown: function(e) {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMsg();
+          }
+        }
+      })),
+      h('button', {
+        class: 'w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center text-lg flex-shrink-0',
+        onclick: sendMsg
+      }, '➤')
+    )
+  );
+
+  function sendMsg() {
+    const text = inputEl.value.trim();
+    if (!text) return;
+    const msg = {
+      id: Date.now(),
+      from: 'You',
+      text,
+      time: new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),
+      own: true,
+    };
+    chatStore.setState({ messages: [...chatStore.getState().messages, msg] });
+    socket.emit('chat:message', msg);
+    socket.on('chat:message', (incoming) => {
+      chatStore.setState({ messages: [...chatStore.getState().messages, incoming] });
+      render();
+    });
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    render();
+  }
+
+  page.append(inputWrap);
+  return page;
+}
+
+// --- PAGE: AI CRISIS ASSISTANT ---
+function AIPage() {
+  const { type } = sosStore.getState();
+  const selectedType = type || 'Medical Emergency';
+  
+  const page = h('div', { class: 'page-enter min-h-screen pb-24' });
+  const header = h('div', { class: 'glass sticky top-0 z-40 px-4 py-3' },
+    h('div', { class: 'flex items-center gap-3 max-w-lg mx-auto' },
+      h('button', { class: 'w-8 h-8 rounded-lg glass flex items-center justify-center text-sm', onclick: () => router.navigate('home') }, '←'),
+      h('h1', { style: { fontFamily: 'var(--font-display)', fontSize: '22px', letterSpacing: '2px', color: '#8B5CF6' } }, 'AI ASSISTANT')
+    )
+  );
+  page.append(header);
+
+  const content = h('div', { class: 'max-w-lg mx-auto px-4 pt-4' });
+
+  const types = ['Medical Emergency', 'Fire', 'Gas Leak', 'Accident', 'Other'];
+  let currentType = selectedType;
+
+  const typeSelector = h('div', { class: 'flex gap-2 overflow-x-auto pb-2 mb-4 hide-scroll' },
+    ...types.map(t => {
+      const icons = { 'Medical Emergency': '🏥', 'Fire': '🔥', 'Gas Leak': '⚠️', 'Accident': '🚗', 'Other': '📢' };
+      const btn = h('button', {
+        class: `px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 ${t === currentType ? 'bg-red-600 text-white' : 'glass text-gray-400'}`,
+        onclick: async function() {
+          currentType = t;
+          document.querySelectorAll('.type-chip').forEach(c => {
+            c.className = `type-chip px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 glass text-gray-400`;
+          });
+          this.className = `type-chip px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 bg-red-600 text-white`;
+          loadGuidance(t);
+        }
+      }, icons[t] + ' ' + t);
+      btn.className += ' type-chip';
+      return btn;
+    })
+  );
+  content.append(typeSelector);
+
+  const guidanceContainer = h('div', { id: 'ai-guidance-container' });
+  content.append(guidanceContainer);
+
+  async function loadGuidance(type) {
+    guidanceContainer.innerHTML = '';
+    const loadCard = h('div', { class: 'glass rounded-2xl p-6 flex flex-col items-center justify-center gap-3', style: { minHeight: '200px' } },
+      Spinner(32),
+      h('p', { class: 'text-sm text-gray-500' }, 'AI analyzing situation...')
+    );
+    guidanceContainer.append(loadCard);
+
+    const guidance = await api.getAIGuidance(type);
+    guidanceContainer.innerHTML = '';
+
+    const severityColors = { HIGH: '#EF4444', CRITICAL: '#FF2D20', MEDIUM: '#F59E0B', LOW: '#10B981' };
+    const sColor = severityColors[guidance.severity] || '#6B7280';
+
+    // AI Summary
+    const summaryCard = h('div', { class: 'glass rounded-2xl p-4 mb-3 slide-up', style: { borderLeft: `3px solid ${sColor}` } },
+      h('div', { class: 'flex items-center gap-2 mb-2' },
+        h('span', { class: 'text-lg' }, '🤖'),
+        h('span', { class: 'font-semibold text-sm' }, 'AI Crisis Summary'),
+        h('span', { 
+          class: 'ml-auto text-xs px-2 py-0.5 rounded-full font-mono font-bold',
+          style: { background: sColor + '22', color: sColor }
+        }, guidance.severity)
+      ),
+      h('p', { class: 'text-sm text-gray-300 leading-relaxed' }, guidance.summary)
+    );
+    guidanceContainer.append(summaryCard);
+
+    // Steps
+    const stepsCard = h('div', { class: 'glass rounded-2xl p-4 mb-3 slide-up' },
+      h('p', { class: 'text-xs text-gray-500 uppercase tracking-wider mb-3' }, 'First Response Steps'),
+      h('div', { class: 'flex flex-col gap-2' },
+        ...guidance.steps.map((step, i) => 
+          h('div', { class: 'flex items-start gap-3' },
+            h('div', { 
+              class: 'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5',
+              style: { background: sColor + '22', color: sColor }
+            }, i + 1),
+            h('p', { class: 'text-sm text-gray-300' }, step)
+          )
+        )
+      )
+    );
+    guidanceContainer.append(stepsCard);
+
+    // Feedback
+    const feedbackCard = h('div', { class: 'glass rounded-2xl p-4 mb-3 slide-up' },
+      h('p', { class: 'text-xs text-gray-500 uppercase tracking-wider mb-3' }, 'Post-Resolution Feedback'),
+      h('textarea', { class: 'inp resize-none text-sm mb-3', placeholder: 'How was the response? Share feedback...', rows: 3 }),
+      h('button', { 
+        class: 'btn-outline w-full py-2.5 text-sm rounded-xl',
+        onclick: function() { showToast('✅ Feedback submitted. Thank you!'); }
+      }, '📤 Submit Feedback')
+    );
+    guidanceContainer.append(feedbackCard);
+  }
+
+  loadGuidance(selectedType);
+  page.append(content);
+  page.append(Navbar('ai'));
+  return page;
+}
+
+// --- PAGE: PROFILE ---
+function ProfilePage() {
+  const { name, skills, anonymous } = userStore.getState();
+  
+  const page = h('div', { class: 'page-enter min-h-screen pb-24' });
+  const header = h('div', { class: 'glass sticky top-0 z-40 px-4 py-3' },
+    h('div', { class: 'flex items-center gap-3 max-w-lg mx-auto' },
+      h('button', { class: 'w-8 h-8 rounded-lg glass flex items-center justify-center text-sm', onclick: () => router.navigate('home') }, '←'),
+      h('h1', { style: { fontFamily: 'var(--font-display)', fontSize: '22px', letterSpacing: '2px' } }, 'MY PROFILE')
+    )
+  );
+  page.append(header);
+
+  const content = h('div', { class: 'max-w-lg mx-auto px-4 pt-4' });
+
+  // Avatar + name
+  const profileCard = h('div', { class: 'glass rounded-2xl p-5 mb-4 text-center' },
+    h('div', { class: 'w-20 h-20 rounded-full bg-red-600 flex items-center justify-center text-3xl font-bold mx-auto mb-3' }, name[0]),
+    h('h2', { class: 'font-bold text-lg' }, name),
+    h('p', { class: 'text-sm text-gray-500 mb-3' }, 'Community Responder'),
+    h('div', { class: 'flex flex-wrap justify-center gap-2' },
+      ...skills.map(skill => {
+        const cls = { 'CPR': 'cpr', 'Doctor': 'doctor', 'Nurse': 'doctor' }[skill] || '';
+        return h('span', { class: `skill-badge ${cls}` }, skill);
+      })
+    )
+  );
+  content.append(profileCard);
+
+  // Skill Registry
+  const allSkills = ['CPR', 'Doctor', 'Nurse', 'Electrician', 'Mechanic', 'First Aid', 'Firefighter'];
+  const userSkills = [...skills];
+
+  const skillsCard = h('div', { class: 'glass rounded-2xl p-4 mb-4' },
+    h('p', { class: 'text-xs text-gray-500 uppercase tracking-wider mb-3' }, 'Skill Registry'),
+    h('div', { id: 'skills-grid', class: 'grid grid-cols-2 gap-2' },
+      ...allSkills.map(skill => {
+        const hasSkill = userSkills.includes(skill);
+        const icons = { 'CPR': '❤️', 'Doctor': '👨‍⚕️', 'Nurse': '👩‍⚕️', 'Electrician': '⚡', 'Mechanic': '🔧', 'First Aid': '🩹', 'Firefighter': '🔥' };
+        const btn = h('button', {
+          class: `flex items-center gap-2 p-3 rounded-xl text-sm font-medium text-left transition-all border ${hasSkill ? 'border-red-500 border-opacity-40 bg-red-500 bg-opacity-10 text-red-300' : 'border-opacity-10 glass text-gray-400'}`,
+          style: { borderColor: hasSkill ? 'rgba(255,45,32,0.4)' : 'var(--border)' },
+          onclick: function() {
+            const idx = userSkills.indexOf(skill);
+            if (idx > -1) userSkills.splice(idx, 1);
+            else userSkills.push(skill);
+            userStore.setState({ skills: [...userSkills] });
+            const hasNow = userSkills.includes(skill);
+            this.className = `flex items-center gap-2 p-3 rounded-xl text-sm font-medium text-left transition-all border ${hasNow ? 'border-red-500 border-opacity-40 bg-red-500 bg-opacity-10 text-red-300' : 'border-opacity-10 glass text-gray-400'}`;
+            this.style.borderColor = hasNow ? 'rgba(255,45,32,0.4)' : 'var(--border)';
+          }
+        },
+          h('span', {}, icons[skill] || '🎯'),
+          skill,
+          hasSkill ? h('span', { class: 'ml-auto text-red-400' }, '✓') : h('span', {})
+        );
+        return btn;
+      })
+    )
+  );
+  content.append(skillsCard);
+
+  // Stats
+  const statsRow = h('div', { class: 'grid grid-cols-3 gap-3 mb-4' },
+    ...([['12', 'Responses'], ['8', 'Resolved'], ['4.9⭐', 'Rating']]).map(([val, label]) =>
+      h('div', { class: 'stat-card text-center' },
+        h('p', { class: 'text-2xl font-bold' }, val),
+        h('p', { class: 'text-xs text-gray-500 mt-1' }, label)
+      )
+    )
+  );
+  content.append(statsRow);
+
+  // Settings
+  const settingsCard = h('div', { class: 'glass rounded-2xl p-4 mb-4' },
+    h('p', { class: 'text-xs text-gray-500 uppercase tracking-wider mb-3' }, 'Settings'),
+    h('div', { class: 'flex items-center justify-between py-2' },
+      h('p', { class: 'text-sm' }, '🔔 Push Notifications'),
+      h('div', { class: 'w-10 h-5 bg-red-600 rounded-full relative cursor-pointer' },
+        h('div', { class: 'absolute right-0.5 top-0.5 w-4 h-4 bg-white rounded-full' })
+      )
+    ),
+    h('div', { class: 'flex items-center justify-between py-2', style: { borderTop: '1px solid var(--border)' } },
+      h('p', { class: 'text-sm' }, '🌐 Share Location'),
+      h('div', { class: 'w-10 h-5 bg-red-600 rounded-full relative cursor-pointer' },
+        h('div', { class: 'absolute right-0.5 top-0.5 w-4 h-4 bg-white rounded-full' })
+      )
+    )
+  );
+  content.append(settingsCard);
+
+  page.append(content);
+  page.append(Navbar('profile'));
+  return page;
+}
+
+// --- PAGE: ADMIN DASHBOARD ---
+function AdminPage() {
+  const page = h('div', { class: 'page-enter min-h-screen pb-24' });
+  const header = h('div', { class: 'glass sticky top-0 z-40 px-4 py-3' },
+    h('div', { class: 'flex items-center justify-between max-w-6xl mx-auto' },
+      h('div', { class: 'flex items-center gap-3' },
+        h('button', { class: 'w-8 h-8 rounded-lg glass flex items-center justify-center text-sm', onclick: () => router.navigate('home') }, '←'),
+        h('h1', { style: { fontFamily: 'var(--font-display)', fontSize: '22px', letterSpacing: '2px', color: 'var(--amber)' } }, 'ADMIN DASHBOARD')
+      ),
+      h('div', { class: 'flex items-center gap-2' },
+        LiveBadge(),
+        h('span', { class: 'font-mono text-xs text-gray-500' }, new Date().toLocaleTimeString())
+      )
+    )
+  );
+  page.append(header);
+
+  const content = h('div', { class: 'max-w-6xl mx-auto px-4 pt-4' });
+
+  // Stats grid
+  const stats = [
+    { label: 'Active SOS', value: '7', icon: '🔴', delta: '+2', color: 'var(--red)' },
+    { label: 'Total Today', value: '24', icon: '📊', delta: '+5', color: 'var(--amber)' },
+    { label: 'Avg Response', value: '3m 42s', icon: '⚡', delta: '-18s', color: 'var(--green)' },
+    { label: 'Resolved', value: '17', icon: '✅', delta: '+3', color: 'var(--blue)' },
+  ];
+
+  const statsGrid = h('div', { class: 'grid grid-cols-2 gap-3 mb-5' });
+  stats.forEach(stat => {
+    statsGrid.append(
+      h('div', { class: 'stat-card' },
+        h('div', { class: 'flex items-center justify-between mb-2' },
+          h('span', { class: 'text-xl' }, stat.icon),
+          h('span', { class: 'text-xs font-mono', style: { color: stat.color } }, stat.delta)
+        ),
+        h('p', { class: 'text-2xl font-bold', style: { color: stat.color } }, stat.value),
+        h('p', { class: 'text-xs text-gray-500 mt-1' }, stat.label)
+      )
+    );
+  });
+  content.append(statsGrid);
+
+  // Crisis type breakdown
+  const breakdown = h('div', { class: 'glass rounded-2xl p-4 mb-4' },
+    h('p', { class: 'text-xs text-gray-500 uppercase tracking-wider mb-3' }, 'By Crisis Type'),
+    h('div', { class: 'flex flex-col gap-2' },
+      ...([
+        ['Medical Emergency', 10, '#EF4444'],
+        ['Accident', 7, '#8B5CF6'],
+        ['Fire', 4, '#F97316'],
+        ['Gas Leak', 2, '#EAB308'],
+        ['Other', 1, '#6B7280'],
+      ]).map(([type, count, color]) => {
+        const pct = Math.round(count / 24 * 100);
+        return h('div', {},
+          h('div', { class: 'flex items-center justify-between text-xs mb-1' },
+            h('span', { class: 'text-gray-300' }, type),
+            h('span', { class: 'font-mono', style: { color } }, `${count} (${pct}%)`)
+          ),
+          h('div', { class: 'h-1.5 rounded-full', style: { background: 'var(--surface-4)' } },
+            h('div', { class: 'h-full rounded-full transition-all', style: { width: pct + '%', background: color } })
+          )
+        );
+      })
+    )
+  );
+  content.append(breakdown);
+
+  // Active SOS table
+  const tableWrap = h('div', { class: 'glass rounded-2xl overflow-hidden mb-4' },
+    h('div', { class: 'px-4 py-3 border-b', style: { borderColor: 'var(--border)' } },
+      h('p', { class: 'text-xs text-gray-500 uppercase tracking-wider' }, 'Active SOS Incidents')
+    ),
+    h('div', { class: 'overflow-x-auto' },
+      h('table', { class: 'admin-table' },
+        h('thead', {},
+          h('tr', {},
+            ..['ID', 'Type', 'Location', 'Time', 'Responders', 'Status', 'Action'].map(col =>
+              h('th', {}, col)
+            )
+          )
+        ),
+        h('tbody', {},
+          ...[
+            ['#SOS001', 'Medical', '40.712, -74.006', '14:32', '2', 'Active', '🔴'],
+            ['#SOS002', 'Accident', '40.718, -73.997', '14:25', '1', 'Active', '🔴'],
+            ['#SOS003', 'Fire', '40.705, -74.012', '14:18', '3', 'Responding', '🟡'],
+            ['#SOS004', 'Gas Leak', '40.720, -74.001', '14:10', '0', 'Unresponded', '⚠️'],
+            ['#SOS005', 'Medical', '40.715, -73.990', '14:05', '2', 'Active', '🔴'],
+          ].map(([id, type, loc, time, resp, status, badge]) =>
+            h('tr', {},
+              h('td', { class: 'font-mono text-xs text-gray-400' }, id),
+              h('td', {}, h('span', { class: `text-xs font-medium` }, badge + ' ' + type)),
+              h('td', { class: 'font-mono text-xs text-gray-500' }, loc),
+              h('td', { class: 'font-mono text-xs' }, time),
+              h('td', {}, h('span', { class: 'text-green-400 font-medium' }, resp)),
+              h('td', {}, h('span', { 
+                class: 'text-xs px-2 py-0.5 rounded-full',
+                style: { 
+                  background: status === 'Active' ? 'rgba(239,68,68,0.15)' : status === 'Responding' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.25)',
+                  color: status === 'Active' ? '#EF4444' : status === 'Responding' ? '#F59E0B' : '#FF6B6B'
+                }
+              }, status)),
+              h('td', {},
+                h('div', { class: 'flex gap-1' },
+                  h('button', { 
+                    class: 'text-xs px-2 py-1 rounded-lg text-green-400',
+                    style: { background: 'rgba(16,185,129,0.1)' },
+                    onclick: () => showToast('✅ SOS marked resolved')
+                  }, 'Resolve'),
+                  h('button', { 
+                    class: 'text-xs px-2 py-1 rounded-lg text-red-400',
+                    style: { background: 'rgba(239,68,68,0.1)' },
+                    onclick: () => showToast('🚩 Flagged for review')
+                  }, 'Flag')
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  );
+  content.append(tableWrap);
+
+  // Response time chart (simple bars)
+  const chartCard = h('div', { class: 'glass rounded-2xl p-4 mb-4' },
+    h('p', { class: 'text-xs text-gray-500 uppercase tracking-wider mb-4' }, 'Response Time (Last 7 Days)'),
+    h('div', { class: 'flex items-end gap-2 h-24' },
+      ...([4.2, 3.8, 5.1, 3.2, 2.9, 4.5, 3.7]).map((val, i) => {
+        const days = ['M','T','W','T','F','S','S'];
+        const pct = (val / 6) * 100;
+        return h('div', { class: 'flex-1 flex flex-col items-center gap-1' },
+          h('div', { class: 'w-full rounded-t-md transition-all', style: { height: pct + '%', background: 'linear-gradient(to top, var(--red-dark), var(--red))', minHeight: '8px' } }),
+          h('span', { class: 'text-xs text-gray-600' }, days[i])
+        );
+      })
+    ),
+    h('p', { class: 'text-xs text-gray-600 mt-2 text-center' }, 'Average in minutes')
+  );
+  content.append(chartCard);
+
+  page.append(content);
+  page.append(Navbar('admin'));
+  return page;
+}
+
+// ==========================================
+// TOAST NOTIFICATIONS
+// ==========================================
+function showToast(msg) {
+  const existing = document.querySelector('.nearhelp-toast');
+  if (existing) existing.remove();
+  
+  const toast = h('div', {
+    class: 'nearhelp-toast fixed top-4 left-1/2 z-[9999] glass rounded-2xl px-4 py-3 text-sm font-medium shadow-2xl',
+    style: { transform: 'translateX(-50%)', animation: 'slideUp 0.3s ease forwards', borderColor: 'rgba(255,45,32,0.3)', maxWidth: '320px', textAlign: 'center' }
+  }, msg);
+  
+  document.body.append(toast);
+  setTimeout(() => toast.remove(), 3500);
+}
+
+// ==========================================
+// MAIN RENDER
+// ==========================================
+function render() {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  
+  const page = router.current;
+  let component;
+  
+  if (page === 'home') component = HomePage();
+  else if (page === 'sos') component = SOSPage();
+  else if (page === 'map') component = LiveMapPage();
+  else if (page === 'responder') component = ResponderPage();
+  else if (page === 'chat') component = ChatPage();
+  else if (page === 'ai') component = AIPage();
+  else if (page === 'profile') component = ProfilePage();
+  else if (page === 'admin') component = AdminPage();
+  else component = HomePage();
+  
+  app.append(component);
+  
+  // Scroll to top
+  window.scrollTo(0, 0);
+}
+
+// Subscribe to router changes
+router.subscribe(() => render());
+
+// Initial location detection
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      mapStore.setState({ 
+        userLocation: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+        locationDetected: true 
+      });
+    },
+    () => {
+      mapStore.setState({ locationDetected: true });
+    },
+    { timeout: 5000 }
+  );
+} else {
+  mapStore.setState({ locationDetected: true });
+}
+
+// Initial render
+render();
+</script>
+
+</body>
+</html>
